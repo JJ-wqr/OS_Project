@@ -1,47 +1,3 @@
-"""
-algorithms.py
-=============
-Phase 2: Core Algorithms Implementation.
-
-Concrete Scheduler subclasses:
-    - FCFSScheduler       : First Come First Serve
-    - SJFScheduler        : Shortest Job First (Non-preemptive)
-    - RoundRobinScheduler : Round Robin with a configurable time quantum
-    - PriorityScheduler   : Priority Scheduling (Non-preemptive)
-
-Shared conventions used by every algorithm in this file
----------------------------------------------------------
-1. Idle CPU time:
-   If, at the current simulation clock time, no process has arrived yet
-   (or all arrived processes have already completed), the CPU sits idle
-   until the next process arrives. This idle gap is explicitly recorded
-   as a GanttEntry with process_id="IDLE" so the Gantt chart in Phase 3
-   accurately reflects gaps in execution rather than silently skipping
-   time forward.
-
-2. Deterministic tie-breaking:
-   Whenever two or more processes are equally eligible to run next (e.g.
-   identical arrival times in FCFS, identical burst times in SJF,
-   identical priority values in PriorityScheduler), ties are broken by
-   Process ID order (P1 before P2 before P3, ...). This guarantees the
-   simulator produces the same, reproducible output every time it is run
-   on the same input -- which matters both for grading consistency and
-   for the testing strategies described in Phase 4.
-
-3. The canonical formulas (reiterated per your instruction that every
-   calculation be explicitly documented):
-
-       Turnaround Time (TAT) = Completion Time (CT) - Arrival Time (AT)
-       Waiting Time   (WT)  = Turnaround Time (TAT) - Burst Time (BT)
-
-   These are computed in exactly one place: `Process.finalize_metrics()`
-   in models.py. Every algorithm below simply calls that method at the
-   correct moment (when a process's remaining_time hits 0) and never
-   re-implements the arithmetic itself. This is intentional: duplicating
-   the formula in four places would risk one copy silently drifting out
-   of sync if the code is ever modified.
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -49,24 +5,11 @@ from typing import List
 
 from models import GanttEntry, Process, Scheduler
 
-
-# ---------------------------------------------------------------------------
-# FCFS - First Come First Serve
-# ---------------------------------------------------------------------------
+#start of FCFS algo
 
 class FCFSScheduler(Scheduler):
-    """
-    First Come First Serve (non-preemptive).
-
-    Rule: processes are executed strictly in order of arrival time. Once a
-    process starts running, it runs to completion (its full burst time)
-    with no interruption.
-
-    Tie-break: if two processes arrive at the exact same time, the one
-    with the lexicographically/numerically smaller PID goes first (see
-    module docstring, point 2).
-    """
-
+# This runs processes in the order they arrive.
+# It is NOT preemptive, so once a process starts, it runs until it finishes.
     @property
     def algorithm_name(self) -> str:
         return "First Come First Serve (FCFS)"
@@ -74,52 +17,32 @@ class FCFSScheduler(Scheduler):
     def _execute(self) -> List[GanttEntry]:
         gantt: List[GanttEntry] = []
 
-        # Sort once by (arrival_time, pid) -- this single sort IS the
-        # entire FCFS algorithm. Everything else is just simulating the
-        # clock forward through that fixed order.
+        # Make new list "ordered", then shorts arrival_time first 
+        #If two process arrive at same time, smaller PID goes first
         ordered = sorted(self.processes, key=lambda p: (p.arrival_time, p.pid))
 
-        clock = 0
+        #clock below is the current cpu time, for each process in arrival order it will execute
+        clock: float = 0.0
         for process in ordered:
-            # If the CPU would otherwise sit idle because this process
-            # hasn't arrived yet, advance the clock and log idle time.
+            # If cpu is free before next process, add "IdlE" to ganttchart, then move clock forward to the arrival time
             if clock < process.arrival_time:
                 gantt.append(GanttEntry("IDLE", clock, process.arrival_time))
                 clock = process.arrival_time
-
+            # When process begin running, end when (start + burst_time) finish, then record that execution in Process object
             start = clock
-            end = clock + process.burst_time  # full burst, non-preemptive
+            end = clock + process.burst_time
             process.record_execution(start, end)
             gantt.append(GanttEntry(process.pid, start, end))
-
+            #move clock to finish time, compute completion for the process
             clock = end
             process.finalize_metrics(completion_time=clock)
 
         return gantt
+        #end of FCFS algo
 
-
-# ---------------------------------------------------------------------------
-# SJF - Shortest Job First (Non-preemptive)
-# ---------------------------------------------------------------------------
-
+# SJF, picks ready process with smallest burst_time, does not interrupt a process once it starts (running process)
 class SJFScheduler(Scheduler):
-    """
-    Shortest Job First, NON-preemptive.
 
-    Rule: at every decision point (whenever the CPU becomes free), look
-    at the set of processes that have ALREADY ARRIVED but not yet run,
-    and pick the one with the smallest burst_time. Once chosen, it runs
-    to completion uninterrupted (that's what makes this non-preemptive --
-    a shorter job arriving mid-execution does NOT pre-empt the running
-    job; it just waits for the next decision point).
-
-    Tie-break: if multiple ready processes share the same (smallest)
-    burst time, the one with the smaller PID is chosen.
-
-    This is a classic "ready queue" simulation: we do not need to know
-    the whole future in advance, we just repeatedly ask "of everything
-    that's available RIGHT NOW, what's shortest?".
-    """
 
     @property
     def algorithm_name(self) -> str:
@@ -127,82 +50,58 @@ class SJFScheduler(Scheduler):
 
     def _execute(self) -> List[GanttEntry]:
         gantt: List[GanttEntry] = []
-
-        remaining_pool: List[Process] = list(self.processes)
-        clock = 0
-        completed = 0
-        n = len(self.processes)
-
+        # makes working list of processes not finished yet
+        pool: List[Process] = list(self.processes)
+        clock: float = 0.0
+        completed: int = 0
+        n: int = len(self.processes)
+        
+        #while completed reapests until all process are complete
         while completed < n:
-            # Everything that has arrived by `clock` and hasn't run yet.
-            ready = [p for p in remaining_pool if p.arrival_time <= clock]
+            #Find all processes that have arried by current clock time
+            ready = [p for p in pool if p.arrival_time <= clock]
 
             if not ready:
-                # Nothing has arrived yet -- CPU is idle until the
-                # earliest future arrival.
-                next_arrival = min(p.arrival_time for p in remaining_pool)
+                #if it is not ready then cpu stay idle.
+                # It then move lcock to next process arrival then loop
+                next_arrival = min(p.arrival_time for p in pool)
                 gantt.append(GanttEntry("IDLE", clock, next_arrival))
                 clock = next_arrival
                 continue
 
-            # Pick shortest burst time; tie-break on PID for determinism.
-            next_process = min(ready, key=lambda p: (p.burst_time, p.pid))
+            #Pick the process iwht smallest burst_time
+            #if burst time ties, smaller pid goes
+            chosen = min(ready, key=lambda p: (p.burst_time, p.pid))
 
+            #run chosen process from start to end, or full burst, record then add gantt block
             start = clock
-            end = clock + next_process.burst_time  # full burst, non-preemptive
-            next_process.record_execution(start, end)
-            gantt.append(GanttEntry(next_process.pid, start, end))
+            end = clock + chosen.burst_time
+            chosen.record_execution(start, end)
+            gantt.append(GanttEntry(chosen.pid, start, end))
 
+            #clock = end below block function updates clock to finish time, compute metrics, remove pool 
+            #removing pool so that it will not run again
             clock = end
-            next_process.finalize_metrics(completion_time=clock)
+            chosen.finalize_metrics(completion_time=clock)
 
-            remaining_pool.remove(next_process)
+            pool.remove(chosen)
             completed += 1
 
         return gantt
+# end of SJF
 
 
-# ---------------------------------------------------------------------------
-# Round Robin
-# ---------------------------------------------------------------------------
-
+#RR preemptive use time_quantum
+#run in a loop using queue
+# eacj process run for repending on the time_quantum, then goes back to queue (iuf not finish)
 class RoundRobinScheduler(Scheduler):
-    """
-    Round Robin (preemptive), with a configurable time quantum.
 
-    Rule: processes take turns running for at most `time_quantum` units
-    at a time. If a process's remaining burst time exceeds the quantum,
-    it is preempted (paused) after exactly `time_quantum` units and sent
-    to the BACK of the ready queue; it will resume later from where it
-    left off. If its remaining time is <= the quantum, it simply finishes
-    during that slice.
 
-    Implementation detail -- handling "leftover" burst time:
-    Each Process tracks `remaining_time` independently of `burst_time`
-    (see models.py). Every time we give a process a slice, we call
-    `record_execution(start, end)`, which decrements remaining_time by
-    the slice length automatically. We never mutate burst_time itself,
-    since burst_time must stay as the ORIGINAL total work for TAT/WT
-    calculations to be correct.
-
-    Handling new arrivals during a running slice:
-    A subtlety that's easy to get wrong: if process A is running from
-    t=2 to t=6, and process B arrives at t=4, B must be added to the
-    ready queue BEFORE A is re-queued (if A still has remaining time) --
-    otherwise you get the wrong execution order (A would unfairly cut
-    back in front of B). This implementation handles that by always
-    enqueuing newly-arrived processes (in arrival-time order) BEFORE
-    re-enqueuing the process that just finished its slice.
-
-    Tie-break for processes that arrive at the exact same timestamp: PID
-    order, consistent with the rest of the simulator.
-    """
-
-    def __init__(self, processes: List[Process], time_quantum: int):
+    def __init__(self, processes: List[Process], time_quantum: int) -> None:
         super().__init__(processes)
         if time_quantum <= 0:
             raise ValueError("time_quantum must be a positive integer.")
-        self.time_quantum = time_quantum
+        self.time_quantum: int = int(time_quantum)
 
     @property
     def algorithm_name(self) -> str:
@@ -211,91 +110,67 @@ class RoundRobinScheduler(Scheduler):
     def _execute(self) -> List[GanttEntry]:
         gantt: List[GanttEntry] = []
 
-        # Processes not yet arrived in simulation time, sorted so we can
-        # peek/pop the earliest arrival efficiently. Ties broken by PID.
+        # not_arrived holds process not yet available sorted by arrival
+        # redy is queue for processes that are well ready to run
         not_arrived = sorted(self.processes, key=lambda p: (p.arrival_time, p.pid))
+        ready: deque[Process] = deque()
+        clock: float = 0.0
+        completed: int = 0
+        n: int = len(self.processes)
+        # move processes that arrived by time "up_to" into ready queue
+        def admit_arrivals(up_to: float) -> None:
 
-        ready_queue: deque[Process] = deque()
-        clock = 0
-        completed = 0
-        n = len(self.processes)
+            while not_arrived and not_arrived[0].arrival_time <= up_to:
+                ready.append(not_arrived.pop(0))
 
-        def admit_new_arrivals(up_to_time: int) -> None:
-            """
-            Moves every process whose arrival_time <= up_to_time from
-            `not_arrived` into the back of the ready_queue, in arrival
-            order (PID tie-break). Mutates `not_arrived` in place.
-            """
-            while not_arrived and not_arrived[0].arrival_time <= up_to_time:
-                ready_queue.append(not_arrived.pop(0))
-
-        # Prime the queue with whatever has arrived at time 0.
-        admit_new_arrivals(clock)
+        #admit arrival puts arrivals that already exist at time 0 into ready
+        admit_arrivals(clock)
 
         while completed < n:
-            if not ready_queue:
-                # Nobody is ready to run -- CPU idles until the next
-                # process arrives.
-                next_arrival = not_arrived[0].arrival_time
-                gantt.append(GanttEntry("IDLE", clock, next_arrival))
-                clock = next_arrival
-                admit_new_arrivals(clock)
+            if not ready:
+
+                if not not_arrived:
+                    break
+                #if ready queue empty but exists future processes, add idle block until next arrival
+                #then, move clock to that arrival and admit newly arrived processes
+                next_arr = not_arrived[0].arrival_time
+                gantt.append(GanttEntry("IDLE", clock, next_arr))
+                clock = next_arr
+                admit_arrivals(clock)
                 continue
+            #take next process from the front of the queue
+            current = ready.popleft()
 
-            current = ready_queue.popleft()
-
-            # Run for min(quantum, what's actually left) -- this is the
-            # "leftover burst time" handling: a process with less work
-            # remaining than a full quantum simply finishes early instead
-            # of "overrunning" into wasted CPU time.
-            slice_length = min(self.time_quantum, current.remaining_time)
+            #decide how long this round runs, either full quantum or less if finishes aealy
+            # record and chart and update lclock
+            slice_len = min(self.time_quantum, current.remaining_time)
             start = clock
-            end = clock + slice_length
+            end = clock + slice_len
 
             current.record_execution(start, end)
             gantt.append(GanttEntry(current.pid, start, end))
             clock = end
-
-            # Admit anyone who arrived DURING this slice before deciding
-            # whether to re-queue `current`. This preserves correct FIFO
-            # fairness: a process that arrived mid-slice is logically
-            # "in line" before the process that just finished its turn.
-            admit_new_arrivals(clock)
+            # add any proceses that arrive during this time sliace
+            admit_arrivals(clock)
 
             if current.is_complete:
                 current.finalize_metrics(completion_time=clock)
                 completed += 1
             else:
-                # Still has work left -- goes to the back of the line.
-                ready_queue.append(current)
+
+                ready.append(current)
+                # if finish, send back to the queue
 
         return gantt
+# end of algorothjm
 
 
-# ---------------------------------------------------------------------------
-# Priority Scheduling (Non-preemptive)
-# ---------------------------------------------------------------------------
+#priority sscheduling non-preemtive
 
+#pick process with the best (smallest priority_)
+# run chosen process to completion (nopreempetion)
 class PriorityScheduler(Scheduler):
-    """
-    Priority Scheduling, NON-preemptive.
 
-    Rule: at every decision point, among all processes that have already
-    arrived but not yet run, pick the one with the smallest priority
-    NUMBER (this implementation follows the common OS convention that
-    LOWER number = HIGHER priority, e.g. priority 1 runs before priority
-    5). Once selected, the process runs to completion uninterrupted.
-
-    NOTE ON CONVENTION: If your course defines priority the opposite way
-    (higher number = higher priority), only ONE line needs to change --
-    the `key=` in the `min()` call below would become a `max()` call, or
-    the priority could be negated. This is called out explicitly here so
-    you can adapt it confidently and explain the choice in your report.
-
-    Tie-break: if multiple ready processes share the same priority value,
-    the one with the smaller PID is chosen (consistent tie-break policy
-    across the whole simulator).
-    """
 
     @property
     def algorithm_name(self) -> str:
@@ -303,33 +178,106 @@ class PriorityScheduler(Scheduler):
 
     def _execute(self) -> List[GanttEntry]:
         gantt: List[GanttEntry] = []
-
-        remaining_pool: List[Process] = list(self.processes)
-        clock = 0
-        completed = 0
-        n = len(self.processes)
+        # proccesses not finished yet (pool: list[process])
+        pool: List[Process] = list(self.processes)
+        clock: float = 0.0
+        completed: int = 0
+        n: int = len(self.processes)
 
         while completed < n:
-            ready = [p for p in remaining_pool if p.arrival_time <= clock]
-
+            #build ready list based on arrival_time 
+            ready = [p for p in pool if p.arrival_time <= clock]
+            # if not ready, cpu waits until next arrival
             if not ready:
-                next_arrival = min(p.arrival_time for p in remaining_pool)
+                next_arrival = min(p.arrival_time for p in pool)
                 gantt.append(GanttEntry("IDLE", clock, next_arrival))
                 clock = next_arrival
                 continue
 
-            # Lower priority number = runs first (see class docstring).
-            next_process = min(ready, key=lambda p: (p.priority, p.pid))
-
+            # pick the smallest priority value, tie-break using PID
+            chosen = min(ready, key=lambda p: (p.priority, p.pid))
+            # run chosen for full burst time, record and add gantt block, move clock forward
             start = clock
-            end = clock + next_process.burst_time  # full burst, non-preemptive
-            next_process.record_execution(start, end)
-            gantt.append(GanttEntry(next_process.pid, start, end))
+            end = clock + chosen.burst_time
+            chosen.record_execution(start, end)
+            gantt.append(GanttEntry(chosen.pid, start, end))
 
             clock = end
-            next_process.finalize_metrics(completion_time=clock)
-
-            remaining_pool.remove(next_process)
+            chosen.finalize_metrics(completion_time=clock)
+            
+            #finalize the metrics, remove from pool, update complted count
+            pool.remove(chosen)
             completed += 1
 
         return gantt
+# end of algorithm
+
+
+# SRTF, shorted remaining time first, it is preemptive and 1 unit at a time
+# at every time unit, it picks ready process with the smallest remaining time
+# if different process becomes better, it will switch - preemption
+class SRTFScheduler(Scheduler):
+
+
+    @property
+    def algorithm_name(self) -> str:
+        return "Shortest Remaining Time First (SRTF, Preemptive)"
+
+    def _execute(self) -> List[GanttEntry]:
+        gantt: List[GanttEntry] = []
+        pool: List[Process] = list(self.processes)
+        clock: float = 0.0
+        completed: int = 0
+        n: int = len(self.processes)
+
+        # current pid stores which process is currently running
+        # current start stores when crrent run segment starts
+        current_pid: str = ""
+        current_start: float = 0.0
+
+        # when switching processes or going idle, it saves finished running segment to gantt
+        def commit_slice(end: float) -> None:
+            if current_pid and end > current_start:
+                gantt.append(GanttEntry(current_pid, current_start, end))
+
+        while completed < n:
+            #ready list contains arrived and unfinished processes
+            ready = [p for p in pool if p.arrival_time <= clock and not p.is_complete]
+            if not ready:
+                future = [p.arrival_time for p in pool if not p.is_complete]
+                if not future:
+                    break
+                next_arr = min(future)
+                commit_slice(clock)
+                gantt.append(GanttEntry("IDLE", clock, next_arr))
+                current_pid = ""
+                clock = next_arr
+                continue
+            #this block functions that if nothing is ready, it goes to the next arrival
+            # commit wwhat was running up to now
+            # add idle segment until next arrival
+            # reset current running process
+
+            #pick process with smallest remaining_time, tie-break by pid
+            chosen = min(ready, key=lambda p: (p.remaining_time, p.pid))
+
+            # this block functions that if we need to switch processes, it commit old segment and start a new segment for the new process
+            if chosen.pid != current_pid:
+                commit_slice(clock)
+                current_pid = chosen.pid
+                current_start = clock
+
+            # run chosen for exactly 1 time unit, move clock forward by 1
+            chosen.record_execution(clock, clock + 1)
+            clock += 1
+
+            if chosen.is_complete:
+                commit_slice(clock)
+                current_pid = ""
+                chosen.finalize_metrics(completion_time=clock)
+                pool.remove(chosen)
+                completed += 1
+                #when chosen has finished after this unit, commit final segment, compute metrics, remove from pool and count completion
+
+        return gantt
+# end of algorithm 
