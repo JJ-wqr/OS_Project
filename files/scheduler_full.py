@@ -1,7 +1,7 @@
 
 
 from __future__ import annotations
-
+import copy
 import csv
 import os
 import random
@@ -181,7 +181,8 @@ class Scheduler(ABC):
                 f"Duplicate process ID(s) found: {names}. "
                 f"Every process must have a unique PID."
             )
-        self.processes: List[Process] = processes
+        self.processes: List[Process] = [copy.deepcopy(p) for p in processes]
+
 
     @property
     @abstractmethod
