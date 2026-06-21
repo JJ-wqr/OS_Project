@@ -1,8 +1,8 @@
+#HANINA ELIAS ABDOSH - 2802516030
+#JEREMY NATHANAEL GUNAWAN - 2802522960
 from __future__ import annotations
-
 from collections import deque
 from typing import List
-
 from models import GanttEntry, Process, Scheduler
 
 #start of FCFS algo
