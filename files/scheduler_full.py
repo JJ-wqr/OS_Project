@@ -1,5 +1,7 @@
 #HANINA ELIAS ABDOSH - 2802516030
 #JEREMY NATHANAEL GUNAWAN - 2802522960
+
+#scheduler.py is just an all-in-one file
 from __future__ import annotations
 import copy
 import csv

@@ -37,7 +37,12 @@ RED   = "\033[91m"
 
 def _supports_colour() -> bool:
 
+    # start of function _supports_colour
+    # This checks if stdout is a real terminal.
+    # If yes, ANSI colours can be used.
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    # end of function _supports_colour
+
 
 
 USE_COLOUR = _supports_colour()
@@ -45,20 +50,33 @@ USE_COLOUR = _supports_colour()
 
 def c(text: str, code: str) -> str:
 
+    # start of function c
+    # Adds an ANSI colour code around text if colours are enabled.
+    # If colours are not supported, it returns text unchanged.
     return f"{code}{text}{RESET}" if USE_COLOUR else text
+    # end of function c
+
 
 
 def banner(title: str) -> None:
+    # start of function banner
+    # Prints a big header with ===== lines and a title in bold.
     print()
     print(c("=" * WIDTH, BOLD))
     print(c(f"  {title}", BOLD))
     print(c("=" * WIDTH, BOLD))
+    # end of function banner
+
 
 
 def section(title: str) -> None:
+
+    # start of function section
+    # Prints a section divider line and the section title.
     print(f"\n{c('─' * WIDTH, DIM)}")
     print(f"  {c(title, BOLD)}")
     print(c("─" * WIDTH, DIM))
+    # end of function section
 
 
 def info(msg: str) -> None:
@@ -79,6 +97,8 @@ def err(msg: str) -> None:
 
 def _prompt_int(prompt: str, min_val: int = 0, max_val: int = 10_000) -> int:
 
+    # start of function _prompt_int
+    # Keeps asking until user types a valid integer in [min_val, max_val].
     while True:
         try:
             raw = input(f"  {prompt}: ").strip()
@@ -88,19 +108,25 @@ def _prompt_int(prompt: str, min_val: int = 0, max_val: int = 10_000) -> int:
             err(f"Please enter a value between {min_val} and {max_val}.")
         except (ValueError, EOFError):
             err("Invalid input.  Please enter a whole number.")
+    # end of function _prompt_int
 
 
 def _prompt_str(prompt: str, max_len: int = 20) -> str:
 
+    # start of function _prompt_str
+    # Asks for input text and checks length is between 1 and max_len.
     while True:
         raw = input(f"  {prompt}: ").strip()
         if 1 <= len(raw) <= max_len:
             return raw
         err(f"Please enter 1–{max_len} characters.")
+    # end of function _prompt_str
 
 
 def input_processes_manually() -> List[Process]:
 
+    # start of function input_processes_manually
+    # Lets the user type processes one by one (pid, arrival, burst, priority).
     section("Manual Process Entry")
     n = _prompt_int("Number of processes to add (1–20)", min_val=1, max_val=20)
     processes: List[Process] = []
@@ -126,10 +152,13 @@ def input_processes_manually() -> List[Process]:
         ok(f"{pid} added  (AT={at}, BT={bt}, Priority={pri})")
 
     return processes
+    # end of function input_processes_manually
 
 
 def generate_random_processes(existing_pids: Optional[set] = None) -> List[Process]:
 
+    # start of function generate_random_processes
+    # Makes a random set of processes using user-chosen min/max values.
     section("Random Workload Generation")
     n       = _prompt_int("Number of processes (1–20)", min_val=1, max_val=20)
     max_at  = _prompt_int("Maximum arrival time", min_val=0, max_val=500)
@@ -158,10 +187,13 @@ def generate_random_processes(existing_pids: Optional[set] = None) -> List[Proce
 
     ok(f"Generated {n} process(es).")
     return processes
+    # end of function generate_random_processes
 
 
 def use_demo_processes() -> List[Process]:
 
+    # start of function use_demo_processes
+    # Returns the built-in demo process list.
     return [
         Process(pid="P1", arrival_time=0, burst_time=5, priority=2),
         Process(pid="P2", arrival_time=0, burst_time=3, priority=1),
@@ -169,10 +201,13 @@ def use_demo_processes() -> List[Process]:
         Process(pid="P4", arrival_time=4, burst_time=6, priority=3),
         Process(pid="P5", arrival_time=6, burst_time=2, priority=5),
     ]
+    # end of function use_demo_processes
 
 
 def select_algorithms(processes: List[Process]) -> Tuple[List, Optional[int]]:
 
+    # start of function select_algorithms
+    # Chooses which scheduler(s) to run, and asks for RR quantum if needed.
     section("Algorithm Selection")
     print("""
     1.  First Come First Serve (FCFS)
@@ -202,10 +237,13 @@ def select_algorithms(processes: List[Process]) -> Tuple[List, Optional[int]]:
         schedulers.append(SRTFScheduler(list(processes)))
 
     return schedulers, quantum
+    # end of function select_algorithms
 
 
 def print_process_table(processes: List[Process]) -> None:
 
+    # start of function print_process_table
+    # Prints a small table with pid, arrival time, burst time, and priority.
     col_pid = max(5, max(len(p.pid) for p in processes))
     header = (
         f"  {'PID':<{col_pid}}  {'Arrival':>7}  {'Burst':>5}  {'Priority':>8}"
@@ -219,10 +257,13 @@ def print_process_table(processes: List[Process]) -> None:
             f"{int(p.burst_time):>5}  {p.priority:>8}"
         )
     print()
+    # end of function print_process_table
 
 
 def print_result(result: SchedulingResult, show_slices: bool = False) -> None:
 
+    # start of function print_result
+    # Prints the Gantt chart and the summary metrics for one scheduler.
     banner(f"Algorithm: {result.algorithm_name}")
 
     print(f"\n  {c('Gantt Chart (bracket):', BOLD)}")
@@ -246,10 +287,13 @@ def print_result(result: SchedulingResult, show_slices: bool = False) -> None:
     for line in result.summary_table().splitlines():
         print(f"  {line}")
     print()
+    # end of function print_result
 
 
 def print_comparison(results: List[SchedulingResult]) -> None:
 
+    # start of function print_comparison
+    # When running multiple schedulers, print average waiting/turnaround.
     banner("Performance Comparison Summary")
     col_alg = max(len(r.algorithm_name) for r in results)
     col_alg = max(col_alg, 45)
@@ -270,10 +314,13 @@ def print_comparison(results: List[SchedulingResult]) -> None:
     ok(f"Lowest Avg WT  : {best_wt.algorithm_name}  ({best_wt.average_waiting_time:.2f})")
     ok(f"Lowest Avg TAT : {best_tat.algorithm_name}  ({best_tat.average_turnaround_time:.2f})")
     print()
+    # end of function print_comparison
 
 
 def offer_csv_export(results: List[SchedulingResult]) -> None:
 
+    # start of function offer_csv_export
+    # Asks user if they want CSV files, then saves one per scheduler.
     section("Export Results to CSV")
     raw = input("  Export results to CSV files? (y/N): ").strip().lower()
     if raw not in ("y", "yes"):
@@ -297,9 +344,13 @@ def offer_csv_export(results: List[SchedulingResult]) -> None:
         filepath = os.path.join(export_dir, f"{safe_name}.csv")
         result.export_csv(filepath)
         ok(f"Saved: {filepath}")
+    # end of function offer_csv_export
 
 
 def main() -> None:
+
+    # start of function main
+    # Main program flow: choose input -> choose algorithms -> run -> print -> export.
     banner("CPU Scheduling Simulator")
     print("""
   Implements:
@@ -361,6 +412,7 @@ def main() -> None:
         offer_csv_export(results)
 
     banner("Simulation Complete")
+    # end of function main
 
 
 if __name__ == "__main__":
